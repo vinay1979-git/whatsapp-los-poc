@@ -13,15 +13,23 @@ const {
   SUPABASE_SERVICE_ROLE_KEY,
 } = process.env;
 
-const GRAPH_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+// Lazily initialised so the module can be imported at build time without
+// env vars present (Next.js evaluates route modules during `next build`).
+let _supabase;
+function db() {
+  if (!_supabase) _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  return _supabase;
+}
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+function graphUrl() {
+  return `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+}
 
 // ---------------------------------------------------------------------------
 // Supabase session store
 // ---------------------------------------------------------------------------
 async function getSession(waId) {
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('applications')
     .select('*')
     .eq('wa_id', waId)
@@ -45,12 +53,12 @@ async function getSession(waId) {
 }
 
 async function saveSession(session) {
-  const { error } = await supabase.from('applications').upsert(session);
+  const { error } = await db().from('applications').upsert(session);
   if (error) throw error;
 }
 
 async function deleteSession(waId) {
-  const { error } = await supabase.from('applications').delete().eq('wa_id', waId);
+  const { error } = await db().from('applications').delete().eq('wa_id', waId);
   if (error) throw error;
 }
 
@@ -59,7 +67,7 @@ async function deleteSession(waId) {
 // ---------------------------------------------------------------------------
 async function sendRequest(payload) {
   try {
-    await axios.post(GRAPH_URL, payload, {
+    await axios.post(graphUrl(), payload, {
       headers: {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
