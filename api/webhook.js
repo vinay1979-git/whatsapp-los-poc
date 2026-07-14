@@ -358,17 +358,13 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    // Ack immediately so Meta doesn't retry. The function stays alive while
-    // handleInboundMessage runs because the exported promise isn't resolved yet.
-    res.status(200).end();
-
     try {
       const entry = req.body.entry?.[0];
       const change = entry?.changes?.[0];
       const value = change?.value;
       const message = value?.messages?.[0];
 
-      if (!message) return; // status updates (delivered/read) – ignore
+      if (!message) return res.status(200).end(); // status updates (delivered/read) – ignore
 
       const waId = message.from;
       console.log(`Inbound [${message.type}] from ${waId}`);
@@ -376,7 +372,7 @@ module.exports = async function handler(req, res) {
     } catch (err) {
       console.error('Error handling webhook event:', err);
     }
-    return;
+    return res.status(200).end();
   }
 
   res.status(405).end();
