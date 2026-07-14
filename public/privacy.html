@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Privacy Policy - WhatsApp LOS POC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+  h1 { font-size: 1.6em; }
+  h2 { font-size: 1.2em; margin-top: 1.5em; }
+  .note { background: #fff8e1; border: 1px solid #f0dca0; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<p><em>Last updated: July 2026</em></p>
+
+<div class="note">
+  <strong>Note:</strong> This is a non-commercial proof-of-concept application used to test a WhatsApp-based
+  loan-onboarding conversation flow. It is not a live financial product, and no real loan applications are
+  processed, approved, or submitted to any lender through this system.
+</div>
+
+<h2>What this application does</h2>
+<p>
+  This application connects to the WhatsApp Cloud API to simulate a loan-application onboarding conversation.
+  When a user messages the associated WhatsApp test number, the application responds with automated prompts
+  to collect sample information as part of a demonstration loan-application journey.
+</p>
+
+<h2>Information we collect</h2>
+<p>During a conversation, the following information may be collected and stored:</p>
+<ul>
+  <li>WhatsApp phone number (used as an identifier for the conversation)</li>
+  <li>Name, date of birth, employment type, and stated monthly income</li>
+  <li>PAN (Permanent Account Number) as entered by the user</li>
+  <li>Media identifiers for any images uploaded (e.g. ID or address proof photos) via WhatsApp</li>
+  <li>The state of the conversation (which step of the demo flow the user has reached)</li>
+</ul>
+
+<h2>How information is used</h2>
+<p>
+  Information collected is used solely to operate the demo conversation flow (e.g. remembering earlier
+  answers, generating a sample reference number, and sending status-update messages back to the user).
+  It is not sold, shared with third parties, or used for advertising. It is not submitted to any credit
+  bureau, lender, or bank as part of this proof of concept.
+</p>
+
+<h2>Data storage</h2>
+<p>
+  Conversation data is stored in a Supabase-hosted database associated with this project, accessible only
+  to the developer operating this proof of concept. Uploaded images are referenced by their WhatsApp media
+  ID; the underlying image files are not permanently downloaded or stored by default in this version of
+  the application.
+</p>
+
+<h2>Data retention and deletion</h2>
+<p>
+  Data is retained only for as long as needed to test and demonstrate the conversation flow. You may
+  request deletion of any data associated with your WhatsApp number by contacting the developer using the
+  details below.
+</p>
+
+<h2>Third-party services</h2>
+<p>
+  This application relies on Meta's WhatsApp Cloud API to send and receive messages, and Supabase to store
+  conversation data. Each of these providers has its own privacy practices governing data transmitted
+  through their platforms.
+</p>
+
+<h2>Contact</h2>
+<p>
+  For questions about this proof of concept or to request data deletion, contact: vinayvis@lentra.ai
+</p>
+
+</body>
+</html>
