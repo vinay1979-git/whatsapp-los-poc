@@ -1,0 +1,17 @@
+{
+  "name": "whatsapp-los-poc",
+  "version": "1.0.0",
+  "description": "WhatsApp LOS onboarding journey - self-serve POC on WhatsApp Cloud API",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
