@@ -5,15 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "server": "node server.js"
+    "start": "next start"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.2",
     "@supabase/supabase-js": "^2.45.0",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

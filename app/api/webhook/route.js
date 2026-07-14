@@ -1,7 +1,18 @@
+/**
+ * app/api/webhook/route.js
+ *
+ * WhatsApp Cloud API webhook — pre-approved personal loan journey.
+ * GET  /api/webhook — Meta hub verification challenge
+ * POST /api/webhook — inbound message events
+ *
+ * State machine wired in §8 step 3 (see docs/loan-journey-implementation-brief.md).
+ * Supabase tables: loan_applications, pre_approved_offers, consent_log
+ * (see supabase/migrations/001_loan_journey.sql)
+ */
+
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
-// Force every invocation to run fresh — no caching for a webhook handler.
 export const dynamic = 'force-dynamic';
 
 const {
@@ -13,8 +24,7 @@ const {
   SUPABASE_SERVICE_ROLE_KEY,
 } = process.env;
 
-// Lazily initialised so the module can be imported at build time without
-// env vars present (Next.js evaluates route modules during `next build`).
+// Lazily initialised — module is imported at build time without env vars.
 let _supabase;
 function db() {
   if (!_supabase) _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -26,45 +36,9 @@ function graphUrl() {
 }
 
 // ---------------------------------------------------------------------------
-// Supabase session store
-// ---------------------------------------------------------------------------
-async function getSession(waId) {
-  const { data, error } = await db()
-    .from('applications')
-    .select('*')
-    .eq('wa_id', waId)
-    .maybeSingle();
-  if (error) throw error;
-  return (
-    data || {
-      wa_id: waId,
-      state: 'NEW',
-      loan_type: null,
-      name: null,
-      pan: null,
-      dob: null,
-      employment: null,
-      income: null,
-      pan_doc_media_id: null,
-      address_doc_media_id: null,
-      ref_id: null,
-    }
-  );
-}
-
-async function saveSession(session) {
-  const { error } = await db().from('applications').upsert(session);
-  if (error) throw error;
-}
-
-async function deleteSession(waId) {
-  const { error } = await db().from('applications').delete().eq('wa_id', waId);
-  if (error) throw error;
-}
-
-// ---------------------------------------------------------------------------
 // Outbound message helpers
 // ---------------------------------------------------------------------------
+
 async function sendRequest(payload) {
   try {
     await axios.post(graphUrl(), payload, {
@@ -78,7 +52,11 @@ async function sendRequest(payload) {
   }
 }
 
-function sendText(to, body) {
+/**
+ * Plain text message.
+ * Also the fallback for any step when the client can't render interactive messages.
+ */
+export function sendText(to, body) {
   return sendRequest({
     messaging_product: 'whatsapp',
     to,
@@ -87,7 +65,15 @@ function sendText(to, body) {
   });
 }
 
-function sendButtons(to, bodyText, buttons) {
+/**
+ * Interactive button message (up to 3 buttons).
+ * buttons: [{ id, title }]
+ *
+ * §4.3 requirement: bodyText must already include a numbered plain-text
+ * fallback ("Reply 1 for Yes, 2 for No") so customers on clients that
+ * can't render buttons can still respond.
+ */
+export function sendButtons(to, bodyText, buttons) {
   return sendRequest({
     messaging_product: 'whatsapp',
     to,
@@ -96,7 +82,7 @@ function sendButtons(to, bodyText, buttons) {
       type: 'button',
       body: { text: bodyText },
       action: {
-        buttons: buttons.map((b) => ({
+        buttons: buttons.map(b => ({
           type: 'reply',
           reply: { id: b.id, title: b.title },
         })),
@@ -105,7 +91,13 @@ function sendButtons(to, bodyText, buttons) {
   });
 }
 
-function sendList(to, bodyText, buttonLabel, rows) {
+/**
+ * Interactive list message.
+ * rows: [{ id, title, description? }]
+ *
+ * Same §4.3 requirement applies — include numbered fallback in bodyText.
+ */
+export function sendList(to, bodyText, buttonLabel, rows) {
   return sendRequest({
     messaging_product: 'whatsapp',
     to,
@@ -122,235 +114,22 @@ function sendList(to, bodyText, buttonLabel, rows) {
 }
 
 // ---------------------------------------------------------------------------
-// Journey step prompts
+// State machine (TODO: §8 step 3)
 // ---------------------------------------------------------------------------
-function promptLoanType(to) {
-  return sendList(
-    to,
-    'Welcome to our loan onboarding assistant! What would you like to apply for?',
-    'Choose loan type',
-    [
-      { id: 'personal_loan', title: 'Personal Loan', description: 'Quick personal loans' },
-      { id: 'business_loan', title: 'Business Loan', description: 'For business needs' },
-      { id: 'gold_loan', title: 'Gold Loan', description: 'Loan against gold' },
-    ]
-  );
-}
 
-function promptConsent(to) {
-  return sendButtons(
-    to,
-    'To proceed, we need your consent to collect and process your details for this application. Do you agree?',
-    [
-      { id: 'consent_yes', title: 'I Agree' },
-      { id: 'consent_no', title: 'Cancel' },
-    ]
-  );
-}
-
-function promptName(to) {
-  return sendText(to, "Great! Let's start with your details.\n\nPlease enter your *full name* as per your PAN card.");
-}
-
-function promptPan(to) {
-  return sendText(to, 'Please enter your *PAN number* (e.g. ABCDE1234F).');
-}
-
-function promptDob(to) {
-  return sendText(to, 'Please enter your *date of birth* (DD-MM-YYYY).');
-}
-
-function promptEmployment(to) {
-  return sendList(to, 'What is your employment type?', 'Choose one', [
-    { id: 'salaried', title: 'Salaried' },
-    { id: 'self_employed', title: 'Self-employed' },
-  ]);
-}
-
-function promptIncome(to) {
-  return sendText(to, 'Please enter your approximate *monthly income* in INR (numbers only).');
-}
-
-function promptPanDoc(to) {
-  return sendText(to, 'Thanks! Now please *upload a photo* of your PAN card.');
-}
-
-function promptAddressDoc(to) {
-  return sendText(to, 'Got it. Now please *upload a photo* of an address proof (Aadhaar / utility bill).');
-}
-
-function promptBureauConsent(to) {
-  return sendButtons(
-    to,
-    'Last step: do you consent to a credit bureau (CIBIL) check for this application?',
-    [
-      { id: 'bureau_yes', title: 'Yes, proceed' },
-      { id: 'bureau_no', title: 'Cancel' },
-    ]
-  );
-}
-
-async function sendSummary(to, session) {
-  const refId = `LOS-${Date.now().toString().slice(-8)}`;
-  session.ref_id = refId;
-  await sendText(
-    to,
-    `Application submitted!\n\n` +
-      `*Reference ID:* ${refId}\n` +
-      `*Loan type:* ${session.loan_type}\n` +
-      `*Name:* ${session.name}\n` +
-      `*Employment:* ${session.employment}\n\n` +
-      `We'll message you here with status updates as your application moves through review. Thank you!`
-  );
-}
-
-// ---------------------------------------------------------------------------
-// State machine
-// ---------------------------------------------------------------------------
+// Placeholder — replaced when the loan journey state machine is wired up.
 async function handleInboundMessage(waId, message) {
-  const session = await getSession(waId);
-  const { state } = session;
-
-  const text = message.type === 'text' ? message.text.body.trim() : null;
-  const interactiveId =
-    message.type === 'interactive'
-      ? message.interactive.button_reply?.id || message.interactive.list_reply?.id
-      : null;
-  const isMedia = message.type === 'image' || message.type === 'document';
-
-  switch (state) {
-    case 'NEW': {
-      await promptLoanType(waId);
-      session.state = 'AWAITING_LOAN_TYPE';
-      break;
-    }
-
-    case 'AWAITING_LOAN_TYPE': {
-      if (!interactiveId) {
-        return sendText(waId, 'Please choose an option from the list above.');
-      }
-      session.loan_type = {
-        personal_loan: 'Personal Loan',
-        business_loan: 'Business Loan',
-        gold_loan: 'Gold Loan',
-      }[interactiveId];
-      await promptConsent(waId);
-      session.state = 'AWAITING_CONSENT';
-      break;
-    }
-
-    case 'AWAITING_CONSENT': {
-      if (interactiveId === 'consent_yes') {
-        await promptName(waId);
-        session.state = 'AWAITING_NAME';
-      } else if (interactiveId === 'consent_no') {
-        await sendText(waId, "No problem - message us again whenever you're ready to apply.");
-        return deleteSession(waId);
-      } else {
-        return sendText(waId, 'Please tap "I Agree" or "Cancel" above.');
-      }
-      break;
-    }
-
-    case 'AWAITING_NAME': {
-      if (!text) return sendText(waId, 'Please type your full name as text.');
-      session.name = text;
-      await promptPan(waId);
-      session.state = 'AWAITING_PAN';
-      break;
-    }
-
-    case 'AWAITING_PAN': {
-      if (!text || !/^[A-Za-z]{5}\d{4}[A-Za-z]$/.test(text)) {
-        return sendText(waId, "That doesn't look like a valid PAN. Format: ABCDE1234F. Please re-enter.");
-      }
-      session.pan = text.toUpperCase();
-      await promptDob(waId);
-      session.state = 'AWAITING_DOB';
-      break;
-    }
-
-    case 'AWAITING_DOB': {
-      if (!text || !/^\d{2}-\d{2}-\d{4}$/.test(text)) {
-        return sendText(waId, 'Please enter your DOB in DD-MM-YYYY format.');
-      }
-      session.dob = text;
-      await promptEmployment(waId);
-      session.state = 'AWAITING_EMPLOYMENT';
-      break;
-    }
-
-    case 'AWAITING_EMPLOYMENT': {
-      if (!interactiveId) return sendText(waId, 'Please choose an option from the list above.');
-      session.employment = { salaried: 'Salaried', self_employed: 'Self-employed' }[interactiveId];
-      await promptIncome(waId);
-      session.state = 'AWAITING_INCOME';
-      break;
-    }
-
-    case 'AWAITING_INCOME': {
-      if (!text || !/^\d+$/.test(text)) return sendText(waId, 'Please enter a numeric monthly income.');
-      session.income = text;
-      await promptPanDoc(waId);
-      session.state = 'AWAITING_PAN_DOC';
-      break;
-    }
-
-    case 'AWAITING_PAN_DOC': {
-      if (!isMedia) return sendText(waId, 'Please upload a photo of your PAN card to continue.');
-      session.pan_doc_media_id = message[message.type].id;
-      await sendText(waId, 'PAN card received.');
-      await promptAddressDoc(waId);
-      session.state = 'AWAITING_ADDRESS_DOC';
-      break;
-    }
-
-    case 'AWAITING_ADDRESS_DOC': {
-      if (!isMedia) return sendText(waId, 'Please upload a photo of your address proof to continue.');
-      session.address_doc_media_id = message[message.type].id;
-      await sendText(waId, 'Address proof received.');
-      await promptBureauConsent(waId);
-      session.state = 'AWAITING_BUREAU_CONSENT';
-      break;
-    }
-
-    case 'AWAITING_BUREAU_CONSENT': {
-      if (interactiveId === 'bureau_yes') {
-        await sendSummary(waId, session);
-        session.state = 'COMPLETE';
-      } else if (interactiveId === 'bureau_no') {
-        await sendText(waId, 'Understood - your application was not submitted. Message us again to restart.');
-        return deleteSession(waId);
-      } else {
-        return sendText(waId, 'Please tap "Yes, proceed" or "Cancel" above.');
-      }
-      break;
-    }
-
-    case 'COMPLETE': {
-      return sendText(
-        waId,
-        `Your application ${session.ref_id} is currently *under review*. We'll notify you here as soon as there's an update.`
-      );
-    }
-
-    default: {
-      session.state = 'NEW';
-      await saveSession(session);
-      return handleInboundMessage(waId, message);
-    }
-  }
-
-  return saveSession(session);
+  console.log(`Inbound [${message.type}] from ${waId} — state machine pending (§8 step 3)`);
 }
 
 // ---------------------------------------------------------------------------
 // Route handlers
 // ---------------------------------------------------------------------------
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const mode = searchParams.get('hub.mode');
-  const token = searchParams.get('hub.verify_token');
+  const mode      = searchParams.get('hub.mode');
+  const token     = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
@@ -362,13 +141,12 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    const body    = await request.json();
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-    if (!message) return new Response(null, { status: 200 }); // status updates – ignore
+    if (!message) return new Response(null, { status: 200 }); // status updates — ignore
 
     const waId = message.from;
-    console.log(`Inbound [${message.type}] from ${waId}`);
     await handleInboundMessage(waId, message);
   } catch (err) {
     console.error('Error handling webhook event:', err);
