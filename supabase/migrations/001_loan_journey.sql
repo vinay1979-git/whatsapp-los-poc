@@ -173,3 +173,19 @@ create table consent_log (
 
 create index consent_log_application_idx
   on consent_log (loan_application_id);
+
+
+-- -----------------------------------------------------------------------------
+-- 5. Row Level Security
+--
+-- All three tables are locked to service-role-only access.
+-- The webhook (lib/loan-journey/db.js) and dashboard data fetch both use
+-- SUPABASE_SERVICE_ROLE_KEY, which bypasses RLS unconditionally.
+-- The anon key (NEXT_PUBLIC_SUPABASE_ANON_KEY) is public-facing and must
+-- never be able to read PAN numbers, Aadhaar digits, or bank details.
+-- Enabling RLS with zero policies achieves this: anon and authenticated roles
+-- get no access; service role is unaffected.
+-- -----------------------------------------------------------------------------
+alter table pre_approved_offers  enable row level security;
+alter table loan_applications    enable row level security;
+alter table consent_log          enable row level security;
